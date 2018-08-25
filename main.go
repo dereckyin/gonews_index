@@ -33,6 +33,7 @@ type AppConfig struct {
 	Myuser     string
 	Mypassword string
 	Mydbname   string
+	Elastic    string
 }
 
 // Config for environment
@@ -158,7 +159,7 @@ func settingConfig() {
 	if env == "" {
 		env = "Dev"
 	}
-	appConfig := loadAppConfig(config, env)
+	appConfig = loadAppConfig(config, env)
 	fmt.Printf("%#v\n", appConfig)
 	fmt.Printf("Environment set to %s\n", env)
 }
@@ -174,8 +175,8 @@ func main() {
 
 	initElastic()
 
-	indexProduct()
-	//indexDesign()
+	//indexProduct()
+	indexDesign()
 	//indexApplication()
 	//indexNews()
 	// searchElastic("hello world")
@@ -288,10 +289,11 @@ func initElastic() {
 	var err error
 	for {
 		elasticClient, err = elastic.NewClient(
-			elastic.SetURL("http://192.168.3.131:9200"),
+			elastic.SetURL(appConfig.Elastic),
 			elastic.SetSniff(false),
 		)
 		if err != nil {
+			log.Println(appConfig.Elastic)
 			log.Println(err)
 			time.Sleep(3 * time.Second)
 		} else {
@@ -444,32 +446,32 @@ func indexProduct() {
 		}
 	}()
 
-	sqlstr := fmt.Sprintf(`SELECT id, pn, supplier_pn, mfs, catalog, description, param, supplier, inventory, currency, offical_price FROM (
-		SELECT b.id, b.pn, b.supplier_pn, CASE WHEN trim(d.NAME) <> '' THEN d.NAME ELSE b.mfs END as mfs, b.catalog,  coalesce(b.description, '') description, coalesce(b.param,'') param, coalesce(c.name, '') supplier, coalesce(a.inventory, 0) inventory, coalesce(a.currency, '') currency, coalesce(a.offical_price, '') offical_price
+	sqlstr := fmt.Sprintf(`SELECT id, pn, supplier_pn, mfs, "catalog", description, param, supplier, inventory, currency, offical_price FROM (
+		SELECT coalesce(b.id, 0) id, coalesce(b.pn, '') pn, coalesce(b.supplier_pn, '') supplier_pn, CASE WHEN trim(d.NAME) <> '' THEN d.NAME ELSE b.mfs END as mfs, coalesce(b.catalog, '') "catalog",  coalesce(b.description, '') description, coalesce(b.param,'') param, coalesce(c.name, '') supplier, coalesce(a.inventory, 0) inventory, coalesce(a.currency, '') currency, coalesce(a.offical_price, '') offical_price
 		FROM pm_product b  LEFT JOIN pm_store_price_select a on a.product_id = b.id  LEFT JOIN pm_product_config e on(e.supplier_id=b.supplier_id) 
 		LEFT JOIN pm_mfs_standard d on (b.mfs_id = d.id),  pm_supplier c   where b.supplier_id = c.id AND b.status is null and (c.status='1' OR c.status  IS NULL) 
 		union  
-		SELECT b.id, b.pn, b.supplier_pn, CASE WHEN trim(d.NAME) <> '' THEN d.NAME ELSE b.mfs END as mfs, b.catalog,  coalesce(b.description, '') description, coalesce(b.param,'') param, coalesce(c.name, '') supplier, coalesce(a.inventory, 0) inventory, coalesce(a.currency, '') currency, coalesce(a.offical_price, '') offical_price
+		SELECT coalesce(b.id, 0) id, coalesce(b.pn, '') pn, coalesce(b.supplier_pn, '') supplier_pn, CASE WHEN trim(d.NAME) <> '' THEN d.NAME ELSE b.mfs END as mfs, coalesce(b.catalog, '') "catalog",  coalesce(b.description, '') description, coalesce(b.param,'') param, coalesce(c.name, '') supplier, coalesce(a.inventory, 0) inventory, coalesce(a.currency, '') currency, coalesce(a.offical_price, '') offical_price
 		FROM pm_supplier_product_c1s b  LEFT JOIN pm_store_price_select a on a.product_id = b.id  LEFT JOIN pm_product_config e on(e.supplier_id=b.supplier_id) 
 		LEFT JOIN pm_mfs_standard d on (b.mfs_id = d.id),  pm_supplier c   where b.supplier_id = c.id AND b.status is null and (c.status='1' OR c.status  IS NULL) 
 		union  
-		SELECT b.id, b.pn, b.supplier_pn, CASE WHEN trim(d.NAME) <> '' THEN d.NAME ELSE b.mfs END as mfs, b.catalog,  coalesce(b.description, '') description, coalesce(b.param,'') param, coalesce(c.name, '') supplier, coalesce(a.inventory, 0) inventory, coalesce(a.currency, '') currency, coalesce(a.offical_price, '') offical_price
+		SELECT coalesce(b.id, 0) id, coalesce(b.pn, '') pn, coalesce(b.supplier_pn, '') supplier_pn, CASE WHEN trim(d.NAME) <> '' THEN d.NAME ELSE b.mfs END as mfs, coalesce(b.catalog, '') "catalog",  coalesce(b.description, '') description, coalesce(b.param,'') param, coalesce(c.name, '') supplier, coalesce(a.inventory, 0) inventory, coalesce(a.currency, '') currency, coalesce(a.offical_price, '') offical_price
 		FROM pm_supplier_product_octopart b  LEFT JOIN pm_store_price_select a on a.product_id = b.id  LEFT JOIN pm_product_config e on(e.supplier_id=b.supplier_id) 
 		LEFT JOIN pm_mfs_standard d on (b.mfs_id = d.id),  pm_supplier c   where b.supplier_id = c.id AND b.status is null and (c.status='1' OR c.status  IS NULL) 
 		union  
-		SELECT b.id, b.pn, b.supplier_pn, CASE WHEN trim(d.NAME) <> '' THEN d.NAME ELSE b.mfs END as mfs, b.catalog,  coalesce(b.description, '') description, coalesce(b.param,'') param, coalesce(c.name, '') supplier, coalesce(a.inventory, 0) inventory, coalesce(a.currency, '') currency, coalesce(a.offical_price, '') offical_price
+		SELECT coalesce(b.id, 0) id, coalesce(b.pn, '') pn, coalesce(b.supplier_pn, '') supplier_pn, CASE WHEN trim(d.NAME) <> '' THEN d.NAME ELSE b.mfs END as mfs, coalesce(b.catalog, '') "catalog",  coalesce(b.description, '') description, coalesce(b.param,'') param, coalesce(c.name, '') supplier, coalesce(a.inventory, 0) inventory, coalesce(a.currency, '') currency, coalesce(a.offical_price, '') offical_price
 		FROM pm_supplier_product_findchips b  LEFT JOIN pm_store_price_select a on a.product_id = b.id  LEFT JOIN pm_product_config e on(e.supplier_id=b.supplier_id) 
 		LEFT JOIN pm_mfs_standard d on (b.mfs_id = d.id),  pm_supplier c   where b.supplier_id = c.id AND b.status is null and (c.status='1' OR c.status  IS NULL) 
 		union  
-		SELECT b.id, b.pn, b.supplier_pn, CASE WHEN trim(d.NAME) <> '' THEN d.NAME ELSE b.mfs END as mfs, b.catalog,  coalesce(b.description, '') description, coalesce(b.param,'') param, coalesce(c.name, '') supplier, coalesce(a.inventory, 0) inventory, coalesce(a.currency, '') currency, coalesce(a.offical_price, '') offical_price
+		SELECT coalesce(b.id, 0) id, coalesce(b.pn, '') pn, coalesce(b.supplier_pn, '') supplier_pn, CASE WHEN trim(d.NAME) <> '' THEN d.NAME ELSE b.mfs END as mfs, coalesce(b.catalog, '') "catalog",  coalesce(b.description, '') description, coalesce(b.param,'') param, coalesce(c.name, '') supplier, coalesce(a.inventory, 0) inventory, coalesce(a.currency, '') currency, coalesce(a.offical_price, '') offical_price
 		FROM pm_supplier_product_463 b  LEFT JOIN pm_store_price_select a on a.product_id = b.id  LEFT JOIN pm_product_config e on(e.supplier_id=b.supplier_id) 
 		LEFT JOIN pm_mfs_standard d on (b.mfs_id = d.id),  pm_supplier c   where b.supplier_id = c.id AND b.status is null and (c.status='1' OR c.status  IS NULL) 
 		union  
-		SELECT b.id, b.pn, b.supplier_pn, CASE WHEN trim(d.NAME) <> '' THEN d.NAME ELSE b.mfs END as mfs, b.catalog,  coalesce(b.description, '') description, coalesce(b.param,'') param, coalesce(c.name, '') supplier, coalesce(a.inventory, 0) inventory, coalesce(a.currency, '') currency, coalesce(a.offical_price, '') offical_price
+		SELECT coalesce(b.id, 0) id, coalesce(b.pn, '') pn, coalesce(b.supplier_pn, '') supplier_pn, CASE WHEN trim(d.NAME) <> '' THEN d.NAME ELSE b.mfs END as mfs, coalesce(b.catalog, '') "catalog",  coalesce(b.description, '') description, coalesce(b.param,'') param, coalesce(c.name, '') supplier, coalesce(a.inventory, 0) inventory, coalesce(a.currency, '') currency, coalesce(a.offical_price, '') offical_price
 		FROM pm_supplier_product_findic b  LEFT JOIN pm_store_price_select a on a.product_id = b.id  LEFT JOIN pm_product_config e on(e.supplier_id=b.supplier_id) 
 		LEFT JOIN pm_mfs_standard d on (b.mfs_id = d.id),  pm_supplier c   where b.supplier_id = c.id AND b.status is null and (c.status='1' OR c.status  IS NULL) 
 		union  
-		SELECT b.id, b.pn, b.supplier_pn, CASE WHEN trim(d.NAME) <> '' THEN d.NAME ELSE b.mfs END as mfs, b.catalog,  coalesce(b.description, '') description, coalesce(b.param,'') param, coalesce(c.name, '') supplier, coalesce(a.inventory, 0) inventory, coalesce(a.currency, '') currency, coalesce(a.offical_price, '') offical_price
+		SELECT coalesce(b.id, 0) id, coalesce(b.pn, '') pn, coalesce(b.supplier_pn, '') supplier_pn, CASE WHEN trim(d.NAME) <> '' THEN d.NAME ELSE b.mfs END as mfs, coalesce(b.catalog, '') "catalog",  coalesce(b.description, '') description, coalesce(b.param,'') param, coalesce(c.name, '') supplier, coalesce(a.inventory, 0) inventory, coalesce(a.currency, '') currency, coalesce(a.offical_price, '') offical_price
 		FROM pm_supplier_product_ickey b  LEFT JOIN pm_store_price_select a on a.product_id = b.id  LEFT JOIN pm_product_config e on(e.supplier_id=b.supplier_id) 
 		LEFT JOIN pm_mfs_standard d on (b.mfs_id = d.id),  pm_supplier c   where b.supplier_id = c.id AND b.status is null and (c.status='1' OR c.status  IS NULL) 
 		) result`)
