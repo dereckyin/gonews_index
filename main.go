@@ -42,8 +42,8 @@ type Config struct {
 	Prod AppConfig
 }
 
-// ProductCotent (Models)
-type ProductCotent struct {
+// ProductContent (Models)
+type ProductContent struct {
 	ID            int64  `json:"id"`
 	Pn            string `json:"pn"`
 	SupplierPn    string `json:"supplier_pn"`
@@ -55,6 +55,23 @@ type ProductCotent struct {
 	Inventory     string `json:"inventory"`
 	Currency      string `json:"currency"`
 	OfficialPrice string `json:"official_price"`
+}
+
+// ProductSearchContent (Models)
+type ProductSearchContent struct {
+	Timestamp    time.Time `json:"@timestamp"`
+	Currency     string    `json:"currency"`
+	OfficalPrice string    `json:"offical_price"`
+	Description  string    `json:"description"`
+	Inventory    int       `json:"inventory"`
+	Catalog      string    `json:"catalog"`
+	Version      string    `json:"@version"`
+	Pn           string    `json:"pn"`
+	Supplier     string    `json:"supplier"`
+	SupplierPn   string    `json:"supplier_pn"`
+	ID           int       `json:"id"`
+	Mfs          string    `json:"mfs"`
+	Param        string    `json:"param"`
 }
 
 // DesignContent (Models)
@@ -83,6 +100,42 @@ type NewsContent struct {
 	CreateTime     time.Time `json:"create_time"`
 	TimeString     string    `json:"time_string"`
 	TotalCount     int64     `json:"total_count"`
+}
+
+// ProductSearch (Models)
+type ProductSearch struct {
+	Took     int  `json:"took"`
+	TimedOut bool `json:"timed_out"`
+	Shards   struct {
+		Total      int `json:"total"`
+		Successful int `json:"successful"`
+		Failed     int `json:"failed"`
+	} `json:"_shards"`
+	Hits struct {
+		Total    int     `json:"total"`
+		MaxScore float64 `json:"max_score"`
+		Hits     []struct {
+			Index  string  `json:"_index"`
+			Type   string  `json:"_type"`
+			ID     string  `json:"_id"`
+			Score  float64 `json:"_score"`
+			Source struct {
+				Timestamp    time.Time `json:"@timestamp"`
+				Currency     string    `json:"currency"`
+				OfficalPrice string    `json:"offical_price"`
+				Description  string    `json:"description"`
+				Inventory    int       `json:"inventory"`
+				Catalog      string    `json:"catalog"`
+				Version      string    `json:"@version"`
+				Pn           string    `json:"pn"`
+				Supplier     string    `json:"supplier"`
+				SupplierPn   string    `json:"supplier_pn"`
+				ID           int       `json:"id"`
+				Mfs          string    `json:"mfs"`
+				Param        string    `json:"param"`
+			} `json:"_source"`
+		} `json:"hits"`
+	} `json:"hits"`
 }
 
 // DesignSearch (Models)
@@ -169,17 +222,114 @@ func main() {
 
 	settingConfig()
 
-	dbpm, err = ConnectPM(appConfig.Pghost, appConfig.Pgport, appConfig.Pguser, appConfig.Pgpassword, appConfig.Pgdbname)
+	//dbpm, err = ConnectPM(appConfig.Pghost, appConfig.Pgport, appConfig.Pguser, appConfig.Pgpassword, appConfig.Pgdbname)
 	checkErr(err)
-	defer ClosePM()
+	//defer ClosePM()
 
 	initElastic()
 
 	//indexProduct()
-	indexDesign()
+	//indexDesign()
 	//indexApplication()
 	//indexNews()
-	// searchElastic("hello world")
+	//searchElastic("hello world")
+	searchProductElastic("")
+}
+
+func searchProductElastic(qry string) {
+
+	ctx := context.Background()
+
+	//term1Query := elastic.NewMultiMatchQuery("apple", "pn", "supplie_pn", "mfs", "supplier", "description", "param").Type("phrase_prefix")
+	term2Query := elastic.NewMultiMatchQuery("usb", "pn", "supplie_pn", "mfs", "supplier", "description", "param").Type("phrase_prefix")
+
+	//generalQ := elastic.NewBoolQuery().Should().
+	//	Filter(term1Query).Filter(term2Query)
+
+	generalQ := elastic.NewBoolQuery().Should().
+		Filter(term2Query)
+
+	searchResult, err := elasticClient.Search().
+		Index("product").  // search in index "twitter"
+		Query(generalQ).   // specify the query
+		Sort("id", false). // sort by "user" field, ascending
+		From(0).Size(10).  // take documents 0-9
+		Pretty(true).      // pretty print request and response JSON
+		Do(ctx)            // execute
+	if err != nil {
+		// Handle error
+		panic(err)
+	}
+
+	// searchResult is of type SearchResult and returns hits, suggestions,
+	// and all kinds of other information from Elasticsearch.
+	fmt.Printf("Query took %d milliseconds\n", searchResult.TookInMillis)
+
+	// Each is a convenience function that iterates over hits in a search result.
+	// It makes sure you don't need to check for nil values in the response.
+	// However, it ignores errors in serialization. If you want full control
+	// over iterating the hits, see below.
+	var ttyp ProductSearchContent
+	for _, item := range searchResult.Each(reflect.TypeOf(ttyp)) {
+		if t, ok := item.(ProductSearchContent); ok {
+			fmt.Printf("Tweet1 by %d: %s\n", t.ID, t.Pn)
+		}
+	}
+
+	fmt.Printf("Found a total of %d tweets\n", searchResult.TotalHits())
+
+	// Here's how you iterate through results with full control over each step.
+	if searchResult.Hits.TotalHits > 0 {
+		fmt.Printf("Found a total of %d tweets\n", searchResult.Hits.TotalHits)
+
+		// Iterate through results
+		for _, hit := range searchResult.Hits.Hits {
+			// hit.Index contains the name of the index
+
+			// Deserialize hit.Source into a Tweet (could also be just a map[string]interface{}).
+			var t ProductSearchContent
+			err := json.Unmarshal(*hit.Source, &t)
+			if err != nil {
+				// Deserialization failed
+			}
+
+			// Work with tweet
+			fmt.Printf("Tweet2 by %d: %s\n", t.ID, t.Pn)
+		}
+	} else {
+		// No hits
+		fmt.Print("Found no tweets\n")
+	}
+
+	s := `{"match_all":{}}`
+
+	res, err := elasticClient.Search().
+		Index("product").
+		Query(elastic.RawStringQuery(s)).
+		Sort("id", false).
+		Do(ctx)
+
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("%d results\n", res.TotalHits())
+
+	result := new(ProductSearch) // or &Foo{}
+	getJson(appConfig.Elastic+"/product/_search?pretty&size=10&from=0&q=usb+apple", result)
+
+	if result.Hits.Total > 0 {
+		for _, thehit := range result.Hits.Hits {
+			var t ProductContent
+
+			t.ID = int64(thehit.Source.ID)
+			t.Pn = thehit.Source.Pn
+
+			// Work with tweet
+			fmt.Printf("Tweet3 by %d: %s\n", t.ID, t.Pn)
+		}
+	}
+
 }
 
 func searchElastic(qry string) {
@@ -193,7 +343,7 @@ func searchElastic(qry string) {
 		Filter(term1Query).Filter(term2Query)
 
 	searchResult, err := elasticClient.Search().
-		Index("design").   // search in index "twitter"
+		Index("mfs").      // search in index "twitter"
 		Query(generalQ).   // specify the query
 		Sort("id", false). // sort by "user" field, ascending
 		From(0).Size(10).  // take documents 0-9
@@ -215,7 +365,7 @@ func searchElastic(qry string) {
 	var ttyp DesignContent
 	for _, item := range searchResult.Each(reflect.TypeOf(ttyp)) {
 		if t, ok := item.(DesignContent); ok {
-			fmt.Printf("Tweet by %d: %s\n", t.ID, t.Category)
+			fmt.Printf("Tweet1 by %d: %s\n", t.ID, t.Category)
 		}
 	}
 
@@ -237,7 +387,7 @@ func searchElastic(qry string) {
 			}
 
 			// Work with tweet
-			fmt.Printf("Tweet by %d: %s\n", t.ID, t.Category)
+			fmt.Printf("Tweet2 by %d: %s\n", t.ID, t.Category)
 		}
 	} else {
 		// No hits
@@ -247,7 +397,7 @@ func searchElastic(qry string) {
 	s := `{"match_all":{}}`
 
 	res, err := elasticClient.Search().
-		Index("design").
+		Index("mfs").
 		Query(elastic.RawStringQuery(s)).
 		Sort("id", false).
 		Do(ctx)
@@ -259,7 +409,7 @@ func searchElastic(qry string) {
 	fmt.Printf("%d results\n", res.TotalHits())
 
 	result := new(DesignSearch) // or &Foo{}
-	getJson("http://192.168.3.131:9200/design/_search?pretty&size=10&from=0&q=usb+apple", result)
+	getJson("http://192.168.3.131:9200/mfs/_search?pretty&size=10&from=0&q=usb+apple", result)
 
 	if result.Hits.Total > 0 {
 		for _, thehit := range result.Hits.Hits {
@@ -269,7 +419,7 @@ func searchElastic(qry string) {
 			t.Category = thehit.Source.Category
 
 			// Work with tweet
-			fmt.Printf("Tweet by %d: %s\n", t.ID, t.Category)
+			fmt.Printf("Tweet3 by %d: %s\n", t.ID, t.Category)
 		}
 	}
 
@@ -302,7 +452,7 @@ func initElastic() {
 	}
 }
 
-func insertProduct(docs []ProductCotent) {
+func insertProduct(docs []ProductContent) {
 
 	ctx := context.Background()
 
@@ -438,7 +588,7 @@ func indexDesign() {
 
 func indexProduct() {
 
-	var records = []ProductCotent{}
+	var records = []ProductContent{}
 
 	defer func() {
 		if err := recover(); err != nil {
@@ -446,35 +596,7 @@ func indexProduct() {
 		}
 	}()
 
-	sqlstr := fmt.Sprintf(`SELECT id, pn, supplier_pn, mfs, "catalog", description, param, supplier, inventory, currency, offical_price FROM (
-		SELECT coalesce(b.id, 0) id, coalesce(b.pn, '') pn, coalesce(b.supplier_pn, '') supplier_pn, CASE WHEN trim(d.NAME) <> '' THEN d.NAME ELSE b.mfs END as mfs, coalesce(b.catalog, '') "catalog",  coalesce(b.description, '') description, coalesce(b.param,'') param, coalesce(c.name, '') supplier, coalesce(a.inventory, 0) inventory, coalesce(a.currency, '') currency, coalesce(a.offical_price, '') offical_price
-		FROM pm_product b  LEFT JOIN pm_store_price_select a on a.product_id = b.id  LEFT JOIN pm_product_config e on(e.supplier_id=b.supplier_id) 
-		LEFT JOIN pm_mfs_standard d on (b.mfs_id = d.id),  pm_supplier c   where b.supplier_id = c.id AND b.status is null and (c.status='1' OR c.status  IS NULL) 
-		union  
-		SELECT coalesce(b.id, 0) id, coalesce(b.pn, '') pn, coalesce(b.supplier_pn, '') supplier_pn, CASE WHEN trim(d.NAME) <> '' THEN d.NAME ELSE b.mfs END as mfs, coalesce(b.catalog, '') "catalog",  coalesce(b.description, '') description, coalesce(b.param,'') param, coalesce(c.name, '') supplier, coalesce(a.inventory, 0) inventory, coalesce(a.currency, '') currency, coalesce(a.offical_price, '') offical_price
-		FROM pm_supplier_product_c1s b  LEFT JOIN pm_store_price_select a on a.product_id = b.id  LEFT JOIN pm_product_config e on(e.supplier_id=b.supplier_id) 
-		LEFT JOIN pm_mfs_standard d on (b.mfs_id = d.id),  pm_supplier c   where b.supplier_id = c.id AND b.status is null and (c.status='1' OR c.status  IS NULL) 
-		union  
-		SELECT coalesce(b.id, 0) id, coalesce(b.pn, '') pn, coalesce(b.supplier_pn, '') supplier_pn, CASE WHEN trim(d.NAME) <> '' THEN d.NAME ELSE b.mfs END as mfs, coalesce(b.catalog, '') "catalog",  coalesce(b.description, '') description, coalesce(b.param,'') param, coalesce(c.name, '') supplier, coalesce(a.inventory, 0) inventory, coalesce(a.currency, '') currency, coalesce(a.offical_price, '') offical_price
-		FROM pm_supplier_product_octopart b  LEFT JOIN pm_store_price_select a on a.product_id = b.id  LEFT JOIN pm_product_config e on(e.supplier_id=b.supplier_id) 
-		LEFT JOIN pm_mfs_standard d on (b.mfs_id = d.id),  pm_supplier c   where b.supplier_id = c.id AND b.status is null and (c.status='1' OR c.status  IS NULL) 
-		union  
-		SELECT coalesce(b.id, 0) id, coalesce(b.pn, '') pn, coalesce(b.supplier_pn, '') supplier_pn, CASE WHEN trim(d.NAME) <> '' THEN d.NAME ELSE b.mfs END as mfs, coalesce(b.catalog, '') "catalog",  coalesce(b.description, '') description, coalesce(b.param,'') param, coalesce(c.name, '') supplier, coalesce(a.inventory, 0) inventory, coalesce(a.currency, '') currency, coalesce(a.offical_price, '') offical_price
-		FROM pm_supplier_product_findchips b  LEFT JOIN pm_store_price_select a on a.product_id = b.id  LEFT JOIN pm_product_config e on(e.supplier_id=b.supplier_id) 
-		LEFT JOIN pm_mfs_standard d on (b.mfs_id = d.id),  pm_supplier c   where b.supplier_id = c.id AND b.status is null and (c.status='1' OR c.status  IS NULL) 
-		union  
-		SELECT coalesce(b.id, 0) id, coalesce(b.pn, '') pn, coalesce(b.supplier_pn, '') supplier_pn, CASE WHEN trim(d.NAME) <> '' THEN d.NAME ELSE b.mfs END as mfs, coalesce(b.catalog, '') "catalog",  coalesce(b.description, '') description, coalesce(b.param,'') param, coalesce(c.name, '') supplier, coalesce(a.inventory, 0) inventory, coalesce(a.currency, '') currency, coalesce(a.offical_price, '') offical_price
-		FROM pm_supplier_product_463 b  LEFT JOIN pm_store_price_select a on a.product_id = b.id  LEFT JOIN pm_product_config e on(e.supplier_id=b.supplier_id) 
-		LEFT JOIN pm_mfs_standard d on (b.mfs_id = d.id),  pm_supplier c   where b.supplier_id = c.id AND b.status is null and (c.status='1' OR c.status  IS NULL) 
-		union  
-		SELECT coalesce(b.id, 0) id, coalesce(b.pn, '') pn, coalesce(b.supplier_pn, '') supplier_pn, CASE WHEN trim(d.NAME) <> '' THEN d.NAME ELSE b.mfs END as mfs, coalesce(b.catalog, '') "catalog",  coalesce(b.description, '') description, coalesce(b.param,'') param, coalesce(c.name, '') supplier, coalesce(a.inventory, 0) inventory, coalesce(a.currency, '') currency, coalesce(a.offical_price, '') offical_price
-		FROM pm_supplier_product_findic b  LEFT JOIN pm_store_price_select a on a.product_id = b.id  LEFT JOIN pm_product_config e on(e.supplier_id=b.supplier_id) 
-		LEFT JOIN pm_mfs_standard d on (b.mfs_id = d.id),  pm_supplier c   where b.supplier_id = c.id AND b.status is null and (c.status='1' OR c.status  IS NULL) 
-		union  
-		SELECT coalesce(b.id, 0) id, coalesce(b.pn, '') pn, coalesce(b.supplier_pn, '') supplier_pn, CASE WHEN trim(d.NAME) <> '' THEN d.NAME ELSE b.mfs END as mfs, coalesce(b.catalog, '') "catalog",  coalesce(b.description, '') description, coalesce(b.param,'') param, coalesce(c.name, '') supplier, coalesce(a.inventory, 0) inventory, coalesce(a.currency, '') currency, coalesce(a.offical_price, '') offical_price
-		FROM pm_supplier_product_ickey b  LEFT JOIN pm_store_price_select a on a.product_id = b.id  LEFT JOIN pm_product_config e on(e.supplier_id=b.supplier_id) 
-		LEFT JOIN pm_mfs_standard d on (b.mfs_id = d.id),  pm_supplier c   where b.supplier_id = c.id AND b.status is null and (c.status='1' OR c.status  IS NULL) 
-		) result`)
+	sqlstr := fmt.Sprintf(`SELECT id, pn, supplier_pn, mfs, "catalog", description, param, supplier, inventory, currency, offical_price FROM fm_product limit 200 OFFSET %d`, (1-1)*10)
 
 	//fmt.Print(sqlstr)
 
@@ -486,7 +608,7 @@ func indexProduct() {
 	//time.Sleep(time.Duration(20) * time.Second)
 
 	for rows.Next() {
-		var content ProductCotent
+		var content ProductContent
 
 		err = rows.Scan(&content.ID, &content.Pn, &content.SupplierPn, &content.Mfs, &content.Catalog, &content.Description, &content.Param, &content.Supplier, &content.Inventory, &content.Currency, &content.OfficialPrice)
 		checkErr(err)
