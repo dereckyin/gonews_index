@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"strconv"
 	"time"
 
 	"github.com/naoina/toml"
@@ -187,6 +188,8 @@ var (
 
 var myClient = &http.Client{Timeout: 10 * time.Second}
 
+const LIMIT_SIZE = 10000
+
 // CONFIG is for file name
 const CONFIG = "config.toml"
 
@@ -222,18 +225,30 @@ func main() {
 
 	settingConfig()
 
-	//dbpm, err = ConnectPM(appConfig.Pghost, appConfig.Pgport, appConfig.Pguser, appConfig.Pgpassword, appConfig.Pgdbname)
+	dbpm, err = ConnectPM(appConfig.Pghost, appConfig.Pgport, appConfig.Pguser, appConfig.Pgpassword, appConfig.Pgdbname)
 	checkErr(err)
-	//defer ClosePM()
+	defer ClosePM()
 
 	initElastic()
 
-	//indexProduct()
+	var offset = 0
+	for {
+		cout := indexProduct(offset)
+
+		if cout == 0 {
+			break
+		} else {
+			offset += LIMIT_SIZE
+		}
+	}
+
+	fmt.Printf("Done! \n")
+
 	//indexDesign()
 	//indexApplication()
 	//indexNews()
 	//searchElastic("hello world")
-	searchProductElastic("")
+	//searchProductElastic("")
 }
 
 func searchProductElastic(qry string) {
@@ -453,14 +468,14 @@ func initElastic() {
 }
 
 func insertProduct(docs []ProductContent) {
-
 	ctx := context.Background()
 
 	for _, doc := range docs {
 
 		_, err := elasticClient.Index().
 			Index("product").
-			Type("product").
+			Type("fmp").
+			Id(strconv.FormatInt(doc.ID, 10)).
 			BodyJson(doc).
 			Do(ctx)
 
@@ -586,7 +601,9 @@ func indexDesign() {
 	insertDesign(records)
 }
 
-func indexProduct() {
+func indexProduct(offset int) int {
+
+	start := time.Now()
 
 	var records = []ProductContent{}
 
@@ -596,7 +613,7 @@ func indexProduct() {
 		}
 	}()
 
-	sqlstr := fmt.Sprintf(`SELECT id, pn, supplier_pn, mfs, "catalog", description, param, supplier, inventory, currency, offical_price FROM fm_product limit 200 OFFSET %d`, (1-1)*10)
+	sqlstr := fmt.Sprintf(`SELECT id, pn, supplier_pn, coalesce(mfs, '') mfs, "catalog", description, param, supplier, inventory, currency, offical_price FROM fm_product limit %d offset %d `, LIMIT_SIZE, offset)
 
 	//fmt.Print(sqlstr)
 
@@ -607,6 +624,7 @@ func indexProduct() {
 
 	//time.Sleep(time.Duration(20) * time.Second)
 
+	var count int
 	for rows.Next() {
 		var content ProductContent
 
@@ -614,9 +632,20 @@ func indexProduct() {
 		checkErr(err)
 
 		records = append(records, content)
+
+		count++
 	}
 
+	elapsed := time.Since(start)
+	fmt.Printf("read %d tooks: %s \n", offset, elapsed)
+
+	start = time.Now()
+	// write to elasticsearch
 	insertProduct(records)
+	elapsed = time.Since(start)
+	fmt.Printf("write tooks: %s \n", elapsed)
+
+	return count
 }
 
 func indexNews() {
