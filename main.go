@@ -11,6 +11,7 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/naoina/toml"
@@ -193,6 +194,10 @@ const LIMIT_SIZE = 10000
 // CONFIG is for file name
 const CONFIG = "config.toml"
 
+type worker struct {
+	Func func()
+}
+
 func loadAppConfig(config Config, env string) AppConfig {
 	r := reflect.ValueOf(config)
 	return reflect.Indirect(r).FieldByName(env).Interface().(AppConfig)
@@ -231,16 +236,20 @@ func main() {
 
 	initElastic()
 
-	var offset = 0
-	for {
-		cout := indexProduct(offset)
+	paraIndexProduct()
 
-		if cout == 0 {
-			break
-		} else {
-			offset += LIMIT_SIZE
+	/*
+		var offset = 0
+		for {
+			cout := indexProduct(offset)
+
+			if cout == 0 {
+				break
+			} else {
+				offset += LIMIT_SIZE
+			}
 		}
-	}
+	*/
 
 	fmt.Printf("Done! \n")
 
@@ -249,6 +258,54 @@ func main() {
 	//indexNews()
 	//searchElastic("hello world")
 	//searchProductElastic("")
+}
+
+func paraIndexProduct() {
+
+	var wg sync.WaitGroup
+
+	var offset = 0
+
+	channels := make(chan worker, 10)
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+			for ch := range channels {
+				//reflect.ValueOf(ch.Func).Call(ch.Args)
+				ch.Func()
+			}
+		}()
+
+	}
+
+	var quit = 0
+	for {
+
+		off := offset
+		offset += 10000
+		wk := worker{
+			Func: func() {
+				cout := indexProduct(off)
+
+				if cout == 0 {
+					quit = 1
+				}
+
+			},
+		}
+		channels <- wk
+
+		if quit != 0 {
+			break
+		}
+
+	}
+	close(channels)
+	wg.Wait()
+
 }
 
 func searchProductElastic(qry string) {
@@ -613,7 +670,7 @@ func indexProduct(offset int) int {
 		}
 	}()
 
-	sqlstr := fmt.Sprintf(`SELECT id, pn, supplier_pn, coalesce(mfs, '') mfs, "catalog", description, param, supplier, inventory, currency, offical_price FROM fm_product limit %d offset %d `, LIMIT_SIZE, offset)
+	sqlstr := fmt.Sprintf(`SELECT id, pn, supplier_pn, coalesce(mfs, '') mfs, "catalog", description, param, supplier, inventory, currency, offical_price FROM fm_product order by id limit %d offset %d `, LIMIT_SIZE, offset)
 
 	//fmt.Print(sqlstr)
 
